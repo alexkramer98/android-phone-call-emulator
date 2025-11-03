@@ -9,25 +9,44 @@ import android.telecom.TelecomManager
 import android.util.Log
 
 class MyConnectionService : ConnectionService() {
+
+    // Hold the WebRTC client
+    private var webrtcClient: SimpleWebRTCClient? = null
+
     override fun onCreateIncomingConnection(
         connectionManagerPhoneAccount: PhoneAccountHandle,
         request: ConnectionRequest
     ): Connection {
         val connection = object : Connection() {
+
             override fun onAnswer() {
                 Log.d("MyConnectionService", "Call answered")
                 setActive()
+
+                // Start WebRTC audio connection
+                webrtcClient = SimpleWebRTCClient(applicationContext)
+                webrtcClient?.start()
             }
 
             override fun onReject() {
                 Log.d("MyConnectionService", "Call rejected")
-                setDisconnected(android.telecom.DisconnectCause(android.telecom.DisconnectCause.REJECTED))
+                stopWebRTC()
+                setDisconnected(
+                    android.telecom.DisconnectCause(
+                        android.telecom.DisconnectCause.REJECTED
+                    )
+                )
                 destroy()
             }
 
             override fun onDisconnect() {
                 Log.d("MyConnectionService", "Call disconnected")
-                setDisconnected(android.telecom.DisconnectCause(android.telecom.DisconnectCause.LOCAL))
+                stopWebRTC()
+                setDisconnected(
+                    android.telecom.DisconnectCause(
+                        android.telecom.DisconnectCause.LOCAL
+                    )
+                )
                 destroy()
             }
         }
@@ -37,8 +56,6 @@ class MyConnectionService : ConnectionService() {
         connection.setCallerDisplayName("Robot", TelecomManager.PRESENTATION_ALLOWED)
         connection.setRinging()
 
-        Log.d("MyConnectionService", "Connection set to ringing")
-
         return connection
     }
 
@@ -46,6 +63,12 @@ class MyConnectionService : ConnectionService() {
         connectionManagerPhoneAccount: PhoneAccountHandle?,
         request: ConnectionRequest?
     ): Connection? {
+        // We are only handling incoming calls in this example
         return null
+    }
+
+    private fun stopWebRTC() {
+        webrtcClient?.close()
+        webrtcClient = null
     }
 }

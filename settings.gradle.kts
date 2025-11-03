@@ -16,9 +16,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://jitpack.io") }  // Add this for Stream WebRTC
     }
 }
 
 rootProject.name = "Telefoon"
 include(":app")
- 
