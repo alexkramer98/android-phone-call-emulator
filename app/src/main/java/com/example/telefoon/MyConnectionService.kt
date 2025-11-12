@@ -4,10 +4,13 @@ import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.content.pm.PackageManager
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.ToneGenerator
+import android.os.Handler
+import android.os.Looper
 import android.telecom.Connection
 import android.telecom.ConnectionRequest
 import android.telecom.ConnectionService
@@ -16,7 +19,6 @@ import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.util.Log
 import androidx.annotation.RequiresPermission
-import androidx.core.app.ActivityCompat
 import kotlin.concurrent.thread
 import kotlin.math.sqrt
 
@@ -32,6 +34,9 @@ class MyConnectionService : ConnectionService() {
         request: ConnectionRequest
     ): Connection {
         val connection = object : Connection() {
+            private var toneGenerator: ToneGenerator? = null
+            private val handler = Handler(Looper.getMainLooper())
+            private var beepRunnable: Runnable? = null
             private var audioRecord: AudioRecord? = null
             private var isRecording = false
             private lateinit var recordingThread: Thread
@@ -50,6 +55,7 @@ class MyConnectionService : ConnectionService() {
                 setActive()
                 startForegroundService()
                 startRecording()
+                startToneGenerator();
             }
 
             override fun onReject() {
@@ -102,12 +108,32 @@ class MyConnectionService : ConnectionService() {
                 Log.d(TAG, "Started recording")
             }
 
+            private fun startToneGenerator() {
+                toneGenerator = ToneGenerator(AudioManager.STREAM_VOICE_CALL, 100)
+
+                beepRunnable = object : Runnable {
+                    override fun run() {
+                        toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
+                        handler.postDelayed(this, 1000)
+                    }
+                }
+
+                handler.post(beepRunnable!!)
+            }
+
             private fun cleanup() {
                 isRecording = false
 
                 audioRecord?.stop()
                 audioRecord?.release()
                 audioRecord = null
+
+                beepRunnable?.let { handler.removeCallbacks(it) }
+                beepRunnable = null
+                toneGenerator?.stopTone()
+                toneGenerator?.release()
+                toneGenerator = null
+
                 Log.d(TAG, "Stopped recording and released resources")
                 stopForegroundService()
             }
