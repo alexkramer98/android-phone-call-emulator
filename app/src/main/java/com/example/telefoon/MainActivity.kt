@@ -1,6 +1,5 @@
 package com.example.telefoon
 
-import android.Manifest
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -11,6 +10,7 @@ import android.telecom.TelecomManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts // Import this
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -19,17 +19,30 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
+import androidx.core.content.ContextCompat // Import this
 
 class MainActivity : ComponentActivity() {
+
+    // Modern way to handle permission requests
+    private val requestPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+            if (isGranted) {
+                Toast.makeText(this, "Microphone permission granted", Toast.LENGTH_SHORT).show()
+                openTelecomSettings()
+            } else {
+                Toast.makeText(this, "Microphone permission is required for this app to function", Toast.LENGTH_LONG).show()
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        setupUi();
-        registerPhoneAccount();
+        setupUi()
+        registerPhoneAccount()
     }
 
     private fun setupUi() {
+        // Your setupUi code remains the same...
         setContent {
             MaterialTheme {
                 Surface(
@@ -50,12 +63,12 @@ class MainActivity : ComponentActivity() {
                         )
 
                         Button(
-                            onClick = { openCallSettings() },
+                            onClick = { enable() },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(56.dp)
                         ) {
-                            Text("Open Settings")
+                            Text("Enable Calling Account")
                         }
                     }
                 }
@@ -64,6 +77,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun registerPhoneAccount() {
+        // Your registerPhoneAccount code remains the same...
         try {
             val telecomManager = getSystemService(TELECOM_SERVICE) as TelecomManager
             val phoneAccountHandle = PhoneAccountHandle(
@@ -81,7 +95,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun openCallSettings() {
+    // This function is now correctly implemented
+    private fun enable() {
+        when {
+            ContextCompat.checkSelfPermission(
+                this,
+                android.Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                // Permission is already granted, proceed to settings
+                openTelecomSettings()
+            }
+            else -> {
+                // Directly ask for the permission
+                requestPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+            }
+        }
+    }
+
+    private fun openTelecomSettings() {
         try {
             val intent = Intent().apply {
                 component = ComponentName(
