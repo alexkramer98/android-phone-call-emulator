@@ -15,6 +15,7 @@ import android.telecom.DisconnectCause
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.util.Log
+import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
 import kotlin.concurrent.thread
 import kotlin.math.sqrt
@@ -39,6 +40,11 @@ class MyConnectionService : ConnectionService() {
                 setAudioModeIsVoip(true)
             }
 
+            override fun onPlayDtmfTone(c: Char) {
+                Log.d(TAG, "DTMF tones: $c")
+            }
+
+            @RequiresPermission(Manifest.permission.RECORD_AUDIO)
             override fun onAnswer() {
                 Log.d(TAG, "Call answered")
                 setActive()
@@ -60,15 +66,8 @@ class MyConnectionService : ConnectionService() {
                 destroy()
             }
 
+            @RequiresPermission(Manifest.permission.RECORD_AUDIO)
             private fun startRecording() {
-                if (ActivityCompat.checkSelfPermission(
-                        applicationContext,
-                        Manifest.permission.RECORD_AUDIO
-                    ) != PackageManager.PERMISSION_GRANTED
-                ) {
-                    Log.e(TAG, "RECORD_AUDIO permission not granted.")
-                    return
-                }
                 val sampleRate = 8000
                 val channelConfig = AudioFormat.CHANNEL_IN_MONO
                 val audioFormat = AudioFormat.ENCODING_PCM_16BIT
