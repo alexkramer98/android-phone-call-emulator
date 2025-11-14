@@ -4,13 +4,11 @@ import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.content.Context
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import android.os.Build
 import android.telecom.Connection
 import android.telecom.ConnectionRequest
 import android.telecom.ConnectionService
@@ -26,7 +24,6 @@ class MyConnectionService : ConnectionService() {
 
     companion object {
         private const val TAG = "MyConnectionService"
-        private const val NOTIFICATION_ID = 1
         private const val NOTIFICATION_CHANNEL_ID = "MyConnectionServiceChannel"
     }
 
@@ -44,11 +41,7 @@ class MyConnectionService : ConnectionService() {
             private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
             private var bufferSize = 0
 
-            // This init block is executed when the Connection object is created.
             init {
-                // *** THIS IS THE CRITICAL CHANGE ***
-                // Tell the Telecom framework that this is a VoIP call and our app will
-                // be managing the audio stream. This is essential for the mic to activate.
                 setAudioModeIsVoip(true)
             }
 
@@ -90,7 +83,6 @@ class MyConnectionService : ConnectionService() {
                 }
 
                 audioRecord = AudioRecord(
-                    // Using MIC is often more reliable than VOICE_COMMUNICATION for direct access.
                     MediaRecorder.AudioSource.MIC,
                     sampleRate,
                     channelConfig,
@@ -125,12 +117,8 @@ class MyConnectionService : ConnectionService() {
 
             private fun cleanup() {
                 isRecording = false
-                try {
-                    if (this::recordingThread.isInitialized) {
-                        recordingThread.join(100)
-                    }
-                } catch (e: InterruptedException) {
-                    Log.e(TAG, "Interrupted while waiting for recording thread to finish", e)
+                if (this::recordingThread.isInitialized) {
+                    recordingThread.join(100)
                 }
 
                 if (audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
@@ -152,65 +140,39 @@ class MyConnectionService : ConnectionService() {
         return connection
     }
 
-    // The rest of the file (startForegroundService, createNotification, etc.) remains the same.
-    // ...
     private fun startForegroundService() {
         createNotificationChannel()
-        val notification = createNotification()
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(
-                    NOTIFICATION_ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-                )
-            } else {
-                startForeground(NOTIFICATION_ID, notification)
-            }
-            Log.d(TAG, "Foreground service started.")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error starting foreground service", e)
-        }
+
+        val notificationBuilder = Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
+        val notification = notificationBuilder.build()
+
+        startForeground(
+            1,
+            notification,
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        )
+        Log.d(TAG, "Foreground service started.")
     }
 
     private fun stopForegroundService() {
         Log.d(TAG, "Stopping foreground service.")
-        stopForeground(true)
+        stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val serviceChannel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID,
-                "Connection Service Channel",
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(serviceChannel)
-        }
-    }
-
-    private fun createNotification(): Notification {
-        val notificationBuilder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
-        } else {
-            @Suppress("DEPRECATION")
-            Notification.Builder(this)
-        }
-
-        return notificationBuilder
-            .setContentTitle("Active Call")
-            .setContentText("Your call is currently in progress.")
-            .setSmallIcon(android.R.drawable.ic_menu_call) // Replace with your own icon
-            .setCategory(Notification.CATEGORY_CALL)
-            .build()
+        val serviceChannel = NotificationChannel(
+            NOTIFICATION_CHANNEL_ID,
+            "Connection Service Channel",
+            NotificationManager.IMPORTANCE_LOW
+        )
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(serviceChannel)
     }
 
     override fun onCreateOutgoingConnection(
         connectionManagerPhoneAccount: PhoneAccountHandle?,
         request: ConnectionRequest?
     ): Connection? {
-        // Not implemented for this example
         return null
     }
 }
