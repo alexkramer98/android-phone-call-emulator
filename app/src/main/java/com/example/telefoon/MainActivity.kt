@@ -26,7 +26,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setupUi();
+        confirmMicPermission();
         registerPhoneAccount();
+    }
+
+    private fun confirmMicPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1)
+        }
     }
 
     private fun setupUi() {
