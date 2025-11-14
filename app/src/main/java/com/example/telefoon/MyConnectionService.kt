@@ -47,6 +47,11 @@ class MyConnectionService : ConnectionService() {
                 destroy()
             }
 
+            override fun onPlayDtmfTone(c: Char) {
+                Log.d("MyConnectionService", "DTMF tone received $c")
+                super.onPlayDtmfTone(c)
+            }
+
             override fun onDisconnect() {
                 Log.d("MyConnectionService", "Call disconnected")
                 cleanup()
