@@ -5,7 +5,6 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -35,11 +34,6 @@ class MyConnectionService : ConnectionService() {
             private var audioRecord: AudioRecord? = null
             private var isRecording = false
             private lateinit var recordingThread: Thread
-
-            private val sampleRate = 8000
-            private val channelConfig = AudioFormat.CHANNEL_IN_MONO
-            private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-            private var bufferSize = 0
 
             init {
                 setAudioModeIsVoip(true)
@@ -75,12 +69,11 @@ class MyConnectionService : ConnectionService() {
                     Log.e(TAG, "RECORD_AUDIO permission not granted.")
                     return
                 }
+                val sampleRate = 8000
+                val channelConfig = AudioFormat.CHANNEL_IN_MONO
+                val audioFormat = AudioFormat.ENCODING_PCM_16BIT
 
-                bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-                if (bufferSize == AudioRecord.ERROR_BAD_VALUE) {
-                    Log.e(TAG, "Invalid AudioRecord parameters.")
-                    return
-                }
+                val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
 
                 audioRecord = AudioRecord(
                     MediaRecorder.AudioSource.MIC,
@@ -89,11 +82,6 @@ class MyConnectionService : ConnectionService() {
                     audioFormat,
                     bufferSize
                 )
-
-                if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                    Log.e(TAG, "AudioRecord could not be initialized.")
-                    return
-                }
 
                 isRecording = true
                 audioRecord?.startRecording()
@@ -117,13 +105,8 @@ class MyConnectionService : ConnectionService() {
 
             private fun cleanup() {
                 isRecording = false
-                if (this::recordingThread.isInitialized) {
-                    recordingThread.join(100)
-                }
 
-                if (audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-                    audioRecord?.stop()
-                }
+                audioRecord?.stop()
                 audioRecord?.release()
                 audioRecord = null
                 Log.d(TAG, "Stopped recording and released resources")
@@ -149,7 +132,6 @@ class MyConnectionService : ConnectionService() {
         startForeground(
             1,
             notification,
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
         )
         Log.d(TAG, "Foreground service started.")
     }
