@@ -20,6 +20,9 @@ import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.util.Log
 import androidx.annotation.RequiresPermission
+import eu.buney.kopus.OpusApplication
+import eu.buney.kopus.OpusDecoder
+import eu.buney.kopus.OpusEncoder
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -33,6 +36,12 @@ class MyConnectionService : ConnectionService() {
         private const val SERVER_HOST = "192.168.2.87" // Change to your server IP
         private const val SERVER_PORT = 9000
         private const val SAMPLE_RATE = 16000
+        private const val FRAME_SIZE = 320 // 20ms at 16kHz
+        private const val CHANNELS = 1
+
+        init {
+            System.loadLibrary("opus_jni")
+        }
     }
 
     override fun onCreateIncomingConnection(
@@ -140,23 +149,45 @@ class MyConnectionService : ConnectionService() {
                 audioTrack?.play()
 
                 receiveThread = thread(start = true) {
-                    val buffer = ByteArray(1024)
-                    val packet = DatagramPacket(buffer, buffer.size)
+                    try {
+                        val decoder = OpusDecoder(sampleRate = SAMPLE_RATE, channels = CHANNELS)
+                        val opusBuffer = ByteArray(1024) // Encoded opus data
+                        val pcmBuffer = ShortArray(FRAME_SIZE) // Decoded PCM samples
+                        val packet = DatagramPacket(opusBuffer, opusBuffer.size)
 
-                    while (isActive) {
-                        try {
-                            udpSocket?.receive(packet)
-                            val audioData = packet.data.copyOfRange(0, packet.length)
-                            audioTrack?.write(audioData, 0, audioData.size)
-                            Log.d(TAG, "Received ${audioData.size} bytes from server")
-                        } catch (e: Exception) {
-                            if (isActive) {
-                                Log.e(TAG, "Error receiving audio", e)
+                        while (isActive) {
+                            try {
+                                udpSocket?.receive(packet)
+                                val opusData = packet.data.copyOfRange(0, packet.length)
+
+                                // Decode Opus to PCM
+                                val decodedSamples = decoder.decode(
+                                    opusData,
+                                    0,
+                                    opusData.size,
+                                    pcmBuffer,
+                                    0,
+                                    FRAME_SIZE,
+                                    false
+                                )
+
+                                if (decodedSamples > 0) {
+                                    // Write decoded PCM to AudioTrack
+                                    audioTrack?.write(pcmBuffer, 0, decodedSamples)
+                                    Log.d(TAG, "Received ${opusData.size} Opus bytes, decoded to $decodedSamples PCM samples")
+                                }
+                            } catch (e: Exception) {
+                                if (isActive) {
+                                    Log.e(TAG, "Error receiving/decoding audio", e)
+                                }
                             }
                         }
+                        decoder.close()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error initializing Opus decoder", e)
                     }
                 }
-                Log.d(TAG, "Started audio playback")
+                Log.d(TAG, "Started audio playback with Opus decoding")
             }
 
             @RequiresPermission(Manifest.permission.RECORD_AUDIO)
@@ -178,30 +209,46 @@ class MyConnectionService : ConnectionService() {
                 audioRecord?.startRecording()
 
                 sendThread = thread(start = true) {
-                    val buffer = ByteArray(1024)
-                    val serverAddress = InetAddress.getByName(SERVER_HOST)
+                    try {
+                        val encoder = OpusEncoder(
+                            sampleRate = SAMPLE_RATE,
+                            channels = CHANNELS,
+                            application = OpusApplication.Voip
+                        )
+                        val pcmBuffer = ShortArray(FRAME_SIZE) // PCM samples
+                        val opusBuffer = ByteArray(1024) // Encoded opus data
+                        val serverAddress = InetAddress.getByName(SERVER_HOST)
 
-                    while (isActive) {
-                        try {
-                            val readBytes = audioRecord?.read(buffer, 0, buffer.size) ?: 0
-                            if (readBytes > 0) {
-                                val packet = DatagramPacket(
-                                    buffer,
-                                    readBytes,
-                                    serverAddress,
-                                    SERVER_PORT
-                                )
-                                udpSocket?.send(packet)
-                                Log.d(TAG, "Sent $readBytes bytes to server")
-                            }
-                        } catch (e: Exception) {
-                            if (isActive) {
-                                Log.e(TAG, "Error sending audio", e)
+                        while (isActive) {
+                            try {
+                                val readSamples = audioRecord?.read(pcmBuffer, 0, FRAME_SIZE) ?: 0
+                                if (readSamples == FRAME_SIZE) {
+                                    // Encode PCM to Opus
+                                    val encodedBytes = encoder.encode(pcmBuffer, 0, FRAME_SIZE, opusBuffer, 0, opusBuffer.size)
+
+                                    if (encodedBytes > 0) {
+                                        val packet = DatagramPacket(
+                                            opusBuffer,
+                                            encodedBytes,
+                                            serverAddress,
+                                            SERVER_PORT
+                                        )
+                                        udpSocket?.send(packet)
+                                        Log.d(TAG, "Sent $encodedBytes Opus bytes (from $readSamples PCM samples)")
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                if (isActive) {
+                                    Log.e(TAG, "Error encoding/sending audio", e)
+                                }
                             }
                         }
+                        encoder.close()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error initializing Opus encoder", e)
                     }
                 }
-                Log.d(TAG, "Started audio recording and sending")
+                Log.d(TAG, "Started audio recording and Opus encoding")
             }
 
             private fun cleanup() {
